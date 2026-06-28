@@ -181,7 +181,7 @@ export default function Chat() {
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between text-sm font-bold text-slate-700">
             <span>Recent Tasks</span>
-            <button className="text-blue-600 hover:underline text-xs">View Calendar 📅</button>
+            <button className="text-blue-600 hover:underline text-xs">View Calendar </button>
           </div>
 
           {filteredTasks.length === 0 ? (
@@ -208,7 +208,7 @@ export default function Chat() {
                         <span className="text-[10px] bg-blue-50 hijacking-none text-blue-600 font-bold px-2 py-0.5 rounded">{task.category}</span>
                         <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded">{task.priority}</span>
                       </div>
-                      <span className="text-[11px] text-slate-400 font-medium">📅 {task.date}</span>
+                      <span className="text-[11px] text-slate-400 font-medium"> {task.date}</span>
                     </div>
                   </div>
                   <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider shrink-0">{task.status}</span>
