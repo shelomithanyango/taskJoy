@@ -11,9 +11,9 @@ export default function Profile() {
     profileImage: "", 
     name: "Insert Name",
     role: "Insert Role / Title",
-    planType: "PRO PLAN",
+    planType: "Free Plan",
     estYear: "EST. 2026",
-    email: "user@example.com",
+   
     
     // Productivity Stats
     tasksCompleted: 0,
@@ -179,13 +179,7 @@ export default function Profile() {
         </div>
 
         {/* --- LOG OUT BUTTON --- */}
-        <div className="pt-4">
-          <button className="w-full border-t border-slate-200 pt-5 pb-2 flex items-center justify-center gap-2 text-rose-600 font-semibold text-sm hover:text-rose-700 transition-colors">
-            <LogOut className="w-4 h-4" />
-            <span>Log Out {userData.email}</span>
-          </button>
-        </div>
-
+       
       </main>
 
       {/* --- BOTTOM TAB NAVIGATION --- */}
