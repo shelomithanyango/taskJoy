@@ -1,33 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from "../components/layout/header";
 import Footer from "../components/layout/footer";
 
 export default function Chat() {
-  // state arrays start empty
   const [tasks, setTasks] = useState([]);
-  
-  // input tracking states
   const [titleInput, setTitleInput] = useState('');
-  const [categoryInput, setCategoryInput] = useState('');
-  const [priorityInput, setPriorityInput] = useState('');
-  const [dateInput, setDateInput] = useState('');
-
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [activeTab, setActiveTab] = useState('Tasks');
-
-  // Voice Recognition States
   const [isListening, setIsListening] = useState(false);
-  const [recognition, setRecognition] = useState(null);
+  
+  // Use a Ref to safely keep track of the recognition instance
+  const recognitionRef = useRef(null);
 
-  const filters = ['All', 'To Do', 'In Progress', 'Done'];
-
-  // Initialize Speech Recognition API on mount
+  // Initialize Speech Recognition API once
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
     if (SpeechRecognition) {
       const rec = new SpeechRecognition();
-      rec.continuous = false; // Stop automatically when user finishes speaking
-      rec.interimResults = false; // Only finalize full sentences
+      rec.continuous = false; // Stop listening automatically after sentence end
+      rec.interimResults = true; // Show interim text while user speaks
       rec.lang = 'en-US';
 
       rec.onstart = () => {
@@ -35,193 +25,201 @@ export default function Chat() {
       };
 
       rec.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        // Append or set the transcribed text directly to the task description field
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
         setTitleInput(transcript);
       };
 
       rec.onerror = (event) => {
-        console.error("Speech recognition error", event.error);
+        console.error("Speech recognition error:", event.error);
         setIsListening(false);
+        if (event.error === 'not-allowed') {
+          alert("Microphone access was denied. Please allow microphone permissions in your browser settings.");
+        }
       };
 
       rec.onend = () => {
         setIsListening(false);
       };
 
-      setRecognition(rec);
+      recognitionRef.current = rec;
     }
   }, []);
 
+  // Toggle Voice Recording
   const toggleListening = () => {
-    if (!recognition) {
-      alert("Voice recognition is not supported in this browser. Try Google Chrome or Safari.");
+    if (!recognitionRef.current) {
+      alert("Voice recognition is not supported in this browser. Try Chrome, Edge, or Safari.");
       return;
     }
 
     if (isListening) {
-      recognition.stop();
+      recognitionRef.current.stop();
     } else {
-      recognition.start();
+      setTitleInput(''); // Clear previous text before listening
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error("Failed to start speech recognition:", err);
+      }
     }
   };
 
-  const handleAddTask = (e) => {
-    e.preventDefault();
-    if (!titleInput.trim() || !categoryInput || !priorityInput || !dateInput) {
-      alert("Please fill out all task details.");
-      return;
+  const handleSendMessage = (e) => {
+    if (e) e.preventDefault();
+    if (!titleInput.trim()) return;
+
+    // Stop listening if sending manually
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
     }
 
     const newTask = {
       id: Date.now(),
       title: titleInput,
-      category: categoryInput,
-      priority: priorityInput,
-      date: dateInput,
-      status: 'To Do',
+      date: new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      status: "To Do"
     };
 
-    setTasks([...tasks, newTask]);
+    setTasks((prev) => [...prev, newTask]);
     setTitleInput('');
-    setCategoryInput('');
-    setPriorityInput('');
-    setDateInput('');
   };
-
-  const handleStatusChange = (id, currentStatus) => {
-    setTasks(tasks.map(task => {
-      if (task.id === id) {
-        const nextStatus = currentStatus === 'To Do' ? 'In Progress' : currentStatus === 'In Progress' ? 'Done' : 'To Do';
-        return { ...task, status: nextStatus };
-      }
-      return task;
-    }));
-  };
-
-  const filteredTasks = tasks.filter(task => {
-    if (activeFilter === 'All') return true;
-    return task.status === activeFilter;
-  });
 
   return (
-    <div className="w-full min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
-      
+    <div className="w-full min-h-screen bg-[#F4F6FB] flex flex-col font-sans text-slate-800 relative">
       {/* HEADER */}
       <Header />
 
-      {/* Spreads cleanly across the page layout */}
-      <main className="flex-1 px-6 py-8 pb-36 w-full max-w-7xl mx-auto flex flex-col gap-6">
+      {/* MAIN CHAT STREAM */}
+      <main className="flex-1 px-4 md:px-8 py-6 w-full max-w-3xl mx-auto flex flex-col gap-6 pb-44">
         
-        {/* INPUT PANEL WITH VOICE ACCELERATOR */}
-        <form onSubmit={handleAddTask} className="bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col gap-3">
-          <div className="relative flex items-center w-full">
+        {/* Status Badge */}
+        <div className="flex justify-center">
+          <div className="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-600 text-xs font-medium px-4 py-1.5 rounded-full shadow-xs">
+            <span className="w-4 h-4 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-[10px] font-bold">🤖</span>
+            AI Assistant is active
+          </div>
+        </div>
+
+        {/* Empty State when no messages exist */}
+        {tasks.length === 0 && (
+          <div className="text-center py-16 text-slate-400 text-xs">
+            No messages yet. Ask the assistant or speak to create a task!
+          </div>
+        )}
+
+        {/* Dynamic Task Stream */}
+        {tasks.map((task) => (
+          <React.Fragment key={task.id}>
+            {/* User Message Bubble */}
+            <div className="flex justify-end mt-2">
+              <div className="bg-[#1D243A] text-white text-sm p-4 rounded-2xl rounded-tr-none max-w-[85%] leading-relaxed shadow-sm">
+                {task.title}
+              </div>
+            </div>
+
+            {/* AI Confirmation Response */}
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-[#4F7BE8] text-white flex items-center justify-center text-xs shrink-0 shadow-sm">
+                🤖
+              </div>
+              <div className="bg-[#5382EC] text-white text-sm p-4 rounded-2xl rounded-tl-none max-w-[85%] leading-relaxed shadow-sm">
+                Sure thing! I've set that up for you. Here are the details:
+              </div>
+            </div>
+
+            {/* Dynamic Task Card */}
+            <div className="ml-10 bg-[#D9E4FE] rounded-2xl p-5 border border-blue-100/80 shadow-xs flex flex-col gap-3 relative overflow-hidden">
+              <div className="absolute -top-6 -right-6 w-24 h-24 bg-blue-200/40 rounded-full pointer-events-none" />
+
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#2857C5] text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#2857C5]">
+                    Task Added
+                  </span>
+                  <h4 className="text-base font-bold text-slate-800 leading-tight">
+                    {task.title}
+                  </h4>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium ml-1">
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>{task.date}</span>
+              </div>
+
+              <div className="flex items-center gap-3 pt-1">
+                <button className="flex-1 py-2 bg-white/70 hover:bg-white text-slate-700 font-semibold text-xs rounded-full border border-blue-200/60 transition-all text-center">
+                  Edit
+                </button>
+                <button className="flex-1 py-2 bg-[#2149B0] hover:bg-[#193A90] text-white font-semibold text-xs rounded-full shadow-sm transition-all text-center border-2 border-dashed border-blue-300">
+                  View
+                </button>
+              </div>
+            </div>
+          </React.Fragment>
+        ))}
+      </main>
+
+      {/* FIXED FLOATING INPUT CONTAINER */}
+      <div className="fixed bottom-20 left-0 right-0 px-4 z-50 pointer-events-none">
+        <div className="max-w-2xl mx-auto pointer-events-auto">
+          <form 
+            onSubmit={handleSendMessage} 
+            className="bg-[#E4ECFF] p-2 rounded-full border border-blue-200/80 shadow-lg flex items-center gap-2 backdrop-blur-md"
+          >
+            {/* Microphone Button */}
+            <button
+              type="button"
+              onClick={toggleListening}
+              className={`p-2.5 rounded-full transition-all shrink-0 ${
+                isListening ? 'bg-red-500 text-white animate-pulse' : 'text-slate-500 hover:text-slate-700'
+              }`}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            </button>
+
+            {/* Input Field */}
             <input
               type="text"
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
-              placeholder={isListening ? "Listening actively..." : "New task description or use voice command..."}
-              className={`w-full pl-4 pr-12 py-3 bg-slate-50 border rounded-xl focus:outline-none focus:border-blue-500 text-sm transition-colors ${
-                isListening ? 'border-red-400 bg-red-50/20 text-red-900 placeholder-red-400' : 'border-slate-200'
-              }`}
+              placeholder={isListening ? "Listening..." : "Ask Assistant..."}
+              className="flex-1 bg-transparent border-none text-slate-800 placeholder-slate-400 text-sm focus:outline-none px-2 min-w-0"
             />
-            {/* VOICE MIC ACTION TOGGLE */}
+
+            {/* Send Button */}
             <button
-              type="button"
-              onClick={toggleListening}
-              className={`absolute right-2.5 p-2 rounded-lg transition-all ${
-                isListening 
-                  ? 'bg-red-500 text-white animate-pulse shadow-md shadow-red-100' 
-                  : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100'
-              }`}
-              title="Toggle Voice Input"
+              type="submit"
+              className="w-10 h-10 bg-[#1D4ED8] hover:bg-blue-800 text-white rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-95 shadow-sm"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 0 3-3v-6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" />
+              <svg className="w-5 h-5 transform rotate-45 -ml-0.5 -mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
               </svg>
             </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <select value={categoryInput} onChange={(e) => setCategoryInput(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500">
-              <option value="" disabled hidden>Category</option>
-              <option value="Work">Work</option>
-              <option value="Study">Study</option>
-              <option value="Personal">Personal</option>
-            </select>
-            <select value={priorityInput} onChange={(e) => setPriorityInput(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500">
-              <option value="" disabled hidden>Priority</option>
-              <option value="High Priority">High Priority</option>
-              <option value="Medium Priority">Medium Priority</option>
-              <option value="Low Priority">Low Priority</option>
-            </select>
-            <input type="text" value={dateInput} onChange={(e) => setDateInput(e.target.value)} placeholder="Oct 24, 2023" className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-center font-medium text-slate-700 focus:outline-none focus:border-blue-500" />
-          </div>
-          <button type="submit" className="w-full py-3 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-100">
-            Add Task
-          </button>
-        </form>
-
-        {/* FILTER CHIPS */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {filters.map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              className={`px-5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ${
-                activeFilter === filter ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {filter}
-            </button>
-          ))}
+          </form>
         </div>
+      </div>
 
-        {/* FEED LIST */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between text-sm font-bold text-slate-700">
-            <span>Recent Tasks</span>
-            <button className="text-blue-600 hover:underline text-xs">View Calendar </button>
-          </div>
-
-          {filteredTasks.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-2xl bg-white text-slate-400 text-xs">
-              No tasks matched this criteria.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredTasks.map((task) => (
-                <div key={task.id} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-start justify-between gap-4 transition-all">
-                  <div className="flex items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleStatusChange(task.id, task.status)}
-                      className={`w-5 h-5 rounded border-2 mt-0.5 flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
-                        task.status === 'Done' ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      {task.status === 'Done' && '✓'}
-                    </button>
-                    <div className="flex flex-col gap-1.5">
-                      <span className={`font-bold text-slate-900 break-words ${task.status === 'Done' ? 'line-through text-slate-400' : ''}`}>{task.title}</span>
-                      <div className="flex flex-wrap gap-1">
-                        <span className="text-[10px] bg-blue-50 hijacking-none text-blue-600 font-bold px-2 py-0.5 rounded">{task.category}</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded">{task.priority}</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 font-medium"> {task.date}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider shrink-0">{task.status}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* FOOTER NAV */}
+      {/* FOOTER */}
       <Footer />
-     
     </div>
   );
 }
